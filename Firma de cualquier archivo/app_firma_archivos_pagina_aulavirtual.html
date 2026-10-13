@@ -1,0 +1,607 @@
+<div class="firma-archivos">
+  <div class="form-group">
+    <label class="d-block" for="files">Selecciona los archivos para firmar</label>
+    <input type="file" id="files" class="form-control-file" accept=".pdf,application/pdf" multiple>
+  </div>
+  <p class="hint">Los archivos deben estar en formato PDF y la zona de firma debe ser la misma en todos los documentos.</p>
+  <div id="actionBar">
+    <button id="sign" class="btn btn-primary" disabled>Firmar y descargar</button>
+    <span id="status" role="status" aria-live="polite"></span>
+  </div>
+</div>
+
+<style>
+  #previewDialog {
+    width: fit-content;
+    max-width: calc(100vw - 1rem);
+    min-width: min(270px, calc(100vw - 1rem));
+    height: min(900px, calc(100dvh - 1rem));
+    max-height: calc(100dvh - 1rem);
+    box-sizing: border-box;
+    padding: .75rem;
+    border: 1px solid #999;
+    border-radius: 8px;
+    color: inherit;
+    background: Canvas;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #previewDialog:not([open]) { display: none; }
+  #previewDialog::backdrop { background: rgb(0 0 0 / 55%); }
+  #previewControls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .75rem 0; }
+  #previewDialog > p { width: 100%; max-width: 100%; box-sizing: border-box; }
+  #previewControls input { width: 5rem; }
+  #signatureFieldControl { max-width: 100%; }
+  #signatureFieldControl select { max-width: 100%; }
+  #manualControls { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+  #previewContainer {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    width: 100%;
+    margin: .25rem auto;
+    overflow: auto;
+  }
+  #previewCanvas {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+  }
+  #selectionCanvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); touch-action: none; cursor: crosshair; }
+  #dialogActions { display: flex; flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+  #dialogActions button { padding: .4rem .5rem; font-size: .9rem; }
+  #cancelPreview { background: #757575; color: #fff; }
+</style>
+<dialog id="previewDialog" aria-labelledby="previewTitle">
+  <h2 id="previewTitle">Configurar la firma</h2>
+  <p id="documentWarning" class="hint" hidden></p>
+  <div id="signatureFieldControl" hidden>
+    <label for="signatureField">Ubicación de la firma</label>
+    <select id="signatureField">
+      <option value="manual">Elegir región manualmente</option>
+    </select>
+  </div>
+  <div id="manualControls">
+    <div id="previewControls">
+      <label for="pageNumber">Página</label>
+      <input id="pageNumber" type="number" min="1" value="1">
+      <span id="pageCount"></span>
+    </div>
+    <p class="hint">Selecciona con el ratón o el dedo la zona donde se colocará la firma.</p>
+    <div id="previewContainer">
+      <canvas id="previewCanvas"></canvas>
+      <canvas id="selectionCanvas" aria-label="Selecciona la región de firma"></canvas>
+    </div>
+    <p id="regionStatus" class="hint" role="status" aria-live="polite">Aún no has seleccionado una región.</p>
+  </div>
+  <div id="dialogActions">
+    <button id="cancelPreview" class="btn btn-secondary" type="button">Cancelar</button>
+    <button id="confirmSign" class="btn btn-primary" type="button" disabled>Firmar y descargar</button>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/ctt-gob-es/clienteafirma@master/afirma-ui-miniapplet-deploy/src/main/webapp/js/autoscript.js"
+        onerror="var s=document.createElement('script');s.src='autoscript.js';document.head.appendChild(s);"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const filesInput = $('files');
+  const signButton = $('sign');
+  const status = $('status');
+
+  function setStatus(message, isError = false) {
+    status.textContent = message;
+    status.className = isError ? 'error' : '';
+  }
+
+  function sanitizeFilename(name) {
+    const safeName = String(name || 'archivo')
+      .normalize('NFC')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+      .replace(/[. ]+$/g, '');
+    return safeName || 'archivo';
+  }
+
+  function uniquePdfName(fileName, usedNames) {
+    const baseName = sanitizeFilename(fileName).replace(/\.pdf$/i, '') || 'archivo';
+    let signedName = `${baseName}_firmado.pdf`;
+    let suffix = 2;
+    while (usedNames.has(signedName.toLocaleLowerCase('es'))) {
+      signedName = `${baseName}_firmado_${suffix++}.pdf`;
+    }
+    usedNames.add(signedName.toLocaleLowerCase('es'));
+    return signedName;
+  }
+
+  function uint8ArrayToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  function base64ToUint8Array(base64) {
+    const binary = atob(base64.replace(/\s+/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function firmarPdf(base64Data, params) {
+    return new Promise((resolve, reject) => {
+      try {
+        AutoScript.sign(
+          base64Data,
+          'SHA256withRSA',
+          'PAdES',
+          params,
+          (signatureB64) => resolve(signatureB64),
+          (type, message, code) => reject(new Error(`${message || 'fallo al firmar'}${code ? ' [' + code + ']' : ''} (${type || 'Error'})`))
+        );
+      } catch(e){
+        let t = '', m = '';
+        try { t = AutoScript.getErrorType(); m = AutoScript.getErrorMessage(); } catch(_){}
+        console.error('Excepción en AutoScript.sign:', e, '| tipo:', t, '| mensaje:', m);
+        const det = (e && e.message && e.message !== 'Error') ? e.message : String(e);
+        reject(new Error(`Excepción al firmar: ${det}` + (t || m ? ` [${t}] ${m}` : '')));
+      }
+    });
+  }
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  const previewDialog = $('previewDialog');
+  const documentWarning = $('documentWarning');
+  const signatureFieldControl = $('signatureFieldControl');
+  const signatureFieldSelect = $('signatureField');
+  const manualControls = $('manualControls');
+  const pageNumberInput = $('pageNumber');
+  const pageCount = $('pageCount');
+  const previewCanvas = $('previewCanvas');
+  const selectionCanvas = $('selectionCanvas');
+  const regionStatus = $('regionStatus');
+  const confirmSignButton = $('confirmSign');
+
+  let pdfs = [];
+  let previewDocument = null;
+  let previewViewport = null;
+  let currentPage = 1;
+  let selectedRegion = null;
+  let drawingRegion = null;
+
+  function disposePreview() {
+    if (previewDocument) previewDocument.destroy();
+    previewDocument = null;
+    pdfs = [];
+    selectedRegion = null;
+    drawingRegion = null;
+    previewViewport = null;
+    previewCanvas.width = 0;
+    previewCanvas.height = 0;
+    selectionCanvas.width = 0;
+    selectionCanvas.height = 0;
+  }
+
+  function getPageLayout(page) {
+    return { view: Array.from(page.view), rotation: page.rotate || 0 };
+  }
+
+  async function inspectPdf(file, bytes, keepDocument = false) {
+    const document = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+    const layout = [];
+    const fields = [];
+    try {
+      for (let number = 1; number <= document.numPages; number++) {
+        const page = await document.getPage(number);
+        layout.push(getPageLayout(page));
+        const annotations = await page.getAnnotations();
+        for (const annotation of annotations) {
+          if (annotation.subtype === 'Widget' &&
+              (annotation.fieldType === 'Sig' || annotation.isSignature) &&
+              !annotation.fieldValue && annotation.fieldName) {
+            fields.push({ name: annotation.fieldName, page: number });
+          }
+        }
+        page.cleanup();
+      }
+    } catch (error) {
+      document.destroy();
+      throw error;
+    }
+    if (!keepDocument) document.destroy();
+    return { file, bytes, layout, fields, document: keepDocument ? document : null };
+  }
+
+  function layoutsMatch(first, other) {
+    if (!first || !other || first.length !== other.length) return false;
+    return first.every((page, index) => {
+      const candidate = other[index];
+      return page.rotation === candidate.rotation &&
+        page.view.every((coordinate, position) => Math.abs(coordinate - candidate.view[position]) < 0.5);
+    });
+  }
+
+  function hasDifferentDocuments() {
+    return pdfs.length > 1 && pdfs.some(pdf => !layoutsMatch(pdfs[0].layout, pdf.layout));
+  }
+
+  function updateConfirmButton() {
+    confirmSignButton.disabled = signatureFieldSelect.value === 'manual' && !selectedRegion;
+  }
+
+  function drawSelection() {
+    const context = selectionCanvas.getContext('2d');
+    const previewBounds = previewCanvas.getBoundingClientRect();
+    selectionCanvas.style.width = `${previewBounds.width}px`;
+    selectionCanvas.style.height = `${previewBounds.height}px`;
+    context.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    if (!previewBounds.width || !previewBounds.height) return;
+    const scaleX = selectionCanvas.width / previewBounds.width;
+    const scaleY = selectionCanvas.height / previewBounds.height;
+    context.strokeStyle = '#767676';
+    context.lineWidth = Math.max(0.5 * scaleX, 0.5 * scaleY);
+    context.strokeRect(
+      context.lineWidth / 2,
+      context.lineWidth / 2,
+      selectionCanvas.width - context.lineWidth,
+      selectionCanvas.height - context.lineWidth
+    );
+    const region = drawingRegion || selectedRegion;
+    if (!region || region.page !== currentPage || !previewViewport) return;
+    const { left, top, right, bottom } = region.viewportRect;
+    context.fillStyle = 'rgba(0, 87, 184, 0.16)';
+    context.strokeStyle = '#0057b8';
+    context.lineWidth = 2;
+    context.fillRect(left, top, right - left, bottom - top);
+    context.strokeRect(left, top, right - left, bottom - top);
+  }
+
+  const previewResizeObserver = new ResizeObserver(drawSelection);
+  previewResizeObserver.observe(previewCanvas);
+
+  function fitDialogToPreview() {
+    const style = getComputedStyle(previewDialog);
+    const horizontalSpace =
+      parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) +
+      parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+    const availableWidth = Math.max(0, window.innerWidth - 16);
+    const targetWidth = previewCanvas.getBoundingClientRect().width * 1.7 + horizontalSpace;
+    previewDialog.style.width = `${Math.min(Math.ceil(targetWidth), availableWidth)}px`;
+  }
+
+  async function renderPreviewPage(number, clearRegion = true) {
+    if (!previewDocument) return;
+    currentPage = Math.max(1, Math.min(previewDocument.numPages, number));
+    previewDialog.style.width = '';
+    if (clearRegion) {
+      selectedRegion = null;
+      regionStatus.textContent = 'Aún no has seleccionado una región.';
+    }
+    pageNumberInput.value = String(currentPage);
+    pageNumberInput.max = String(previewDocument.numPages);
+    pageCount.textContent = `de ${previewDocument.numPages}`;
+    const page = await previewDocument.getPage(currentPage);
+    const viewport = page.getViewport({ scale: 1.4 });
+    previewViewport = viewport;
+    previewCanvas.width = viewport.width;
+    previewCanvas.height = viewport.height;
+    selectionCanvas.width = viewport.width;
+    selectionCanvas.height = viewport.height;
+    await page.render({ canvasContext: previewCanvas.getContext('2d'), viewport }).promise;
+    drawSelection();
+    page.cleanup();
+    fitDialogToPreview();
+    drawSelection();
+  }
+
+  function pdfRectangleFromSelection(region) {
+    const { left, top, right, bottom } = region.viewportRect;
+    const points = [
+      previewViewport.convertToPdfPoint(left, top),
+      previewViewport.convertToPdfPoint(left, bottom),
+      previewViewport.convertToPdfPoint(right, top),
+      previewViewport.convertToPdfPoint(right, bottom),
+    ];
+    return {
+      lowerLeftX: Math.min(...points.map(point => point[0])),
+      lowerLeftY: Math.min(...points.map(point => point[1])),
+      upperRightX: Math.max(...points.map(point => point[0])),
+      upperRightY: Math.max(...points.map(point => point[1])),
+      page: region.page,
+    };
+  }
+
+  async function openSignaturePreview() {
+    if (typeof pdfjsLib === 'undefined') {
+      throw new Error('No se pudo cargar el visor PDF. Comprueba la conexión e inténtalo de nuevo.');
+    }
+    disposePreview();
+    const selectedFiles = Array.from(filesInput.files);
+    for (let index = 0; index < selectedFiles.length; index++) {
+      const file = selectedFiles[index];
+      setStatus(`Revisando documento ${index + 1} de ${selectedFiles.length}: ${file.name}`);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (String.fromCharCode(...bytes.subarray(0, 4)) !== '%PDF') {
+        throw new Error(`El archivo "${file.name}" no es un PDF válido.`);
+      }
+      try {
+        const pdf = await inspectPdf(file, bytes, index === 0);
+        pdfs.push(pdf);
+        if (index === 0) previewDocument = pdf.document;
+      } catch (error) {
+        if (index === 0) throw new Error(`No se pudo previsualizar "${file.name}": ${error.message || error}`);
+        pdfs.push({ file, bytes, layout: null, fields: [], document: null, inspectionError: error });
+      }
+    }
+
+    while (signatureFieldSelect.options.length > 1) signatureFieldSelect.remove(1);
+    const firstFields = pdfs[0].fields;
+    for (let index = 0; index < firstFields.length; index++) {
+      const option = document.createElement('option');
+      option.value = `field:${index}`;
+      option.textContent = `${firstFields[index].name} (página ${firstFields[index].page})`;
+      signatureFieldSelect.appendChild(option);
+    }
+    signatureFieldSelect.value = 'manual';
+    signatureFieldControl.hidden = firstFields.length === 0;
+    manualControls.hidden = false;
+    documentWarning.hidden = !hasDifferentDocuments();
+    if (!documentWarning.hidden) {
+      documentWarning.textContent =
+        'Los documentos no tienen la misma estructura. Si continúa, se intentará aplicar en cada uno la ubicación elegida en el primero (campo de firma o página y región), siempre que sea compatible. Los documentos incompatibles no se firmarán y se incluirán en el ZIP con su nombre original.';
+    }
+
+    currentPage = 1;
+    selectedRegion = null;
+    previewDialog.style.width = '';
+    confirmSignButton.textContent = documentWarning.hidden ? 'Firmar y descargar' : 'Continuar y firmar';
+    previewDialog.showModal();
+    await renderPreviewPage(1);
+    fitDialogToPreview();
+    updateConfirmButton();
+    setStatus('');
+  }
+
+  function getSelectedField() {
+    if (!signatureFieldSelect.value.startsWith('field:')) return null;
+    const index = Number(signatureFieldSelect.value.slice('field:'.length));
+    return Number.isInteger(index) ? pdfs[0].fields[index] || null : null;
+  }
+
+  function buildFirmaParams(pdf, choice) {
+    if (choice.field) {
+      const field = pdf.fields.find(candidate => candidate.name === choice.field.name);
+      if (!field) throw new Error(`No se encontró el campo de firma "${choice.field.name}".`);
+      return [
+        `signatureFieldName=${field.name.replace(/[\r\n]/g, ' ')}`,
+        `signaturePages=${field.page}`,
+      ].join('\n');
+    }
+    const pageLayout = pdf.layout && pdf.layout[choice.region.page - 1];
+    if (!pageLayout) throw new Error(`El documento no tiene la página ${choice.region.page}.`);
+    const [pageLeft, pageBottom, pageRight, pageTop] = pageLayout.view;
+    const rect = choice.region;
+    if (rect.lowerLeftX < pageLeft || rect.lowerLeftY < pageBottom ||
+        rect.upperRightX > pageRight || rect.upperRightY > pageTop) {
+      throw new Error(`La región seleccionada no cabe en la página ${choice.region.page}.`);
+    }
+    return [
+      `signaturePositionOnPageLowerLeftX=${rect.lowerLeftX.toFixed(2)}`,
+      `signaturePositionOnPageLowerLeftY=${rect.lowerLeftY.toFixed(2)}`,
+      `signaturePositionOnPageUpperRightX=${rect.upperRightX.toFixed(2)}`,
+      `signaturePositionOnPageUpperRightY=${rect.upperRightY.toFixed(2)}`,
+      `signaturePages=${rect.page}`,
+    ].join('\n');
+  }
+
+  function uniqueArchiveName(fileName, signed, usedNames) {
+    const baseName = sanitizeFilename(fileName).replace(/\.pdf$/i, '') || 'archivo';
+    const suffix = signed ? '_signed' : '';
+    let name = `${baseName}${suffix}.pdf`;
+    let counter = 2;
+    while (usedNames.has(name.toLocaleLowerCase('es'))) {
+      name = `${baseName}${suffix}_${counter++}.pdf`;
+    }
+    usedNames.add(name.toLocaleLowerCase('es'));
+    return name;
+  }
+
+  async function signSelectedPdfs(choice) {
+    try {
+      if (typeof AutoScript === 'undefined' || typeof AutoScript.sign !== 'function' ||
+          typeof AutoScript.cargarAppAfirma !== 'function' || typeof AutoScript.setStickySignatory !== 'function') {
+        throw new Error('No se pudo cargar AutoScript. Comprueba la conexión o coloca autoscript.js junto a esta página.');
+      }
+      if (pdfs.length > 1 && typeof JSZip === 'undefined') {
+        throw new Error('No se pudo cargar JSZip, necesario para descargar varios documentos.');
+      }
+      if (typeof AutoScript.setForceWSMode === 'function') AutoScript.setForceWSMode(false);
+      AutoScript.cargarAppAfirma();
+      AutoScript.setStickySignatory(true);
+
+      const results = [];
+      for (let index = 0; index < pdfs.length; index++) {
+        const pdf = pdfs[index];
+        setStatus(`Firmando ${index + 1} de ${pdfs.length}: ${pdf.file.name}`);
+        try {
+          if (pdf.inspectionError) throw new Error('No se pudo comprobar la estructura de sus páginas.');
+          const firmaParams = buildFirmaParams(pdf, choice);
+          const signedBase64 = await firmarPdf(uint8ArrayToBase64(pdf.bytes), firmaParams);
+          if (!signedBase64) throw new Error('AutoFirma no devolvió el PDF firmado.');
+          const signedBytes = base64ToUint8Array(signedBase64);
+          if (String.fromCharCode(...signedBytes.subarray(0, 4)) !== '%PDF') {
+            throw new Error('AutoFirma no devolvió un PDF firmado válido.');
+          }
+          results.push({ pdf, signedBytes });
+        } catch (error) {
+          console.error(`No se pudo firmar "${pdf.file.name}":`, error);
+          results.push({ pdf, error });
+        }
+      }
+
+      const successful = results.filter(result => result.signedBytes);
+      const failed = results.filter(result => result.error);
+      if (pdfs.length === 1) {
+        if (failed.length) throw new Error(`No se pudo firmar "${pdfs[0].file.name}": ${failed[0].error.message}`);
+        const name = uniquePdfName(pdfs[0].file.name, new Set());
+        downloadBlob(new Blob([successful[0].signedBytes], { type: 'application/pdf' }), name);
+        setStatus(`PDF firmado descargado: ${name}`);
+        return;
+      }
+
+      const zip = new JSZip();
+      const usedNames = new Set();
+      for (const result of results) {
+        const name = uniqueArchiveName(result.pdf.file.name, Boolean(result.signedBytes), usedNames);
+        zip.file(name, result.signedBytes || result.pdf.bytes);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(blob, 'documentos_firmados.zip');
+      setStatus(
+        `Firmados ${successful.length} de ${results.length} documentos. ZIP descargado.` +
+        (failed.length ? ` Sin firmar (incluidos con su nombre original): ${failed.map(result => result.pdf.file.name).join(', ')}.` : ''),
+        failed.length > 0
+      );
+    } finally {
+      disposePreview();
+      filesInput.disabled = false;
+      signButton.disabled = filesInput.files.length === 0;
+    }
+  }
+
+  filesInput.addEventListener('change', () => {
+    const selectedFiles = Array.from(filesInput.files);
+    const invalidFiles = selectedFiles.filter(file => !/\.pdf$/i.test(file.name));
+    signButton.disabled = selectedFiles.length === 0 || invalidFiles.length > 0;
+    setStatus(
+      invalidFiles.length
+        ? `Solo se admiten archivos PDF: ${invalidFiles.map(file => file.name).join(', ')}.`
+        : selectedFiles.length ? `${selectedFiles.length} archivo(s) seleccionado(s).` : '',
+      invalidFiles.length > 0
+    );
+  });
+
+  signButton.addEventListener('click', async () => {
+    const selectedFiles = Array.from(filesInput.files);
+    if (!selectedFiles.length) return;
+    if (selectedFiles.some(file => !/\.pdf$/i.test(file.name))) {
+      setStatus('Solo se admiten archivos PDF.', true);
+      return;
+    }
+    signButton.disabled = true;
+    filesInput.disabled = true;
+    setStatus(`Preparando la vista previa de ${selectedFiles.length} documento(s)…`);
+    try {
+      await openSignaturePreview();
+    } catch (error) {
+      console.error('Error al preparar la vista previa:', error);
+      disposePreview();
+      filesInput.disabled = false;
+      signButton.disabled = filesInput.files.length === 0;
+      setStatus(`Error: ${error.message || error}`, true);
+    }
+  });
+
+  signatureFieldSelect.addEventListener('change', () => {
+    manualControls.hidden = signatureFieldSelect.value !== 'manual';
+    updateConfirmButton();
+  });
+  pageNumberInput.addEventListener('change', () => renderPreviewPage(Number(pageNumberInput.value) || 1));
+
+  selectionCanvas.addEventListener('pointerdown', event => {
+    if (manualControls.hidden || !previewViewport) return;
+    const bounds = selectionCanvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(previewViewport.width, (event.clientX - bounds.left) * previewViewport.width / bounds.width));
+    const y = Math.max(0, Math.min(previewViewport.height, (event.clientY - bounds.top) * previewViewport.height / bounds.height));
+    drawingRegion = { page: currentPage, viewportRect: { left: x, top: y, right: x, bottom: y } };
+    selectionCanvas.setPointerCapture(event.pointerId);
+    drawSelection();
+  });
+  selectionCanvas.addEventListener('pointermove', event => {
+    if (!drawingRegion || !previewViewport) return;
+    const bounds = selectionCanvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(previewViewport.width, (event.clientX - bounds.left) * previewViewport.width / bounds.width));
+    const y = Math.max(0, Math.min(previewViewport.height, (event.clientY - bounds.top) * previewViewport.height / bounds.height));
+    drawingRegion.viewportRect.right = x;
+    drawingRegion.viewportRect.bottom = y;
+    drawSelection();
+  });
+  selectionCanvas.addEventListener('pointerup', event => {
+    if (!drawingRegion) return;
+    const { left, top, right, bottom } = drawingRegion.viewportRect;
+    if (Math.abs(right - left) < 12 || Math.abs(bottom - top) < 12) {
+      drawingRegion = null;
+      regionStatus.textContent = 'La región es demasiado pequeña. Selecciona un rectángulo mayor.';
+      drawSelection();
+      updateConfirmButton();
+      return;
+    }
+    selectedRegion = {
+      page: currentPage,
+      viewportRect: {
+        left: Math.min(left, right),
+        top: Math.min(top, bottom),
+        right: Math.max(left, right),
+        bottom: Math.max(top, bottom),
+      },
+    };
+    drawingRegion = null;
+    regionStatus.textContent = `Región seleccionada en la página ${currentPage}.`;
+    drawSelection();
+    updateConfirmButton();
+    selectionCanvas.releasePointerCapture(event.pointerId);
+  });
+
+  $('cancelPreview').addEventListener('click', () => {
+    previewDialog.close();
+    disposePreview();
+    filesInput.disabled = false;
+    signButton.disabled = filesInput.files.length === 0;
+    setStatus('Firma cancelada.');
+  });
+  previewDialog.addEventListener('cancel', () => {
+    disposePreview();
+    filesInput.disabled = false;
+    signButton.disabled = filesInput.files.length === 0;
+    setStatus('Firma cancelada.');
+  });
+  confirmSignButton.addEventListener('click', async () => {
+    const field = getSelectedField();
+    if (!field && !selectedRegion) return;
+    const choice = field ? { field } : { region: pdfRectangleFromSelection(selectedRegion) };
+    previewDialog.close();
+    confirmSignButton.disabled = true;
+    try {
+      await signSelectedPdfs(choice);
+    } catch (error) {
+      console.error('Error al firmar los archivos:', error);
+      disposePreview();
+      filesInput.disabled = false;
+      signButton.disabled = filesInput.files.length === 0;
+      setStatus(`Error: ${error.message || error}`, true);
+    }
+  });
+</script>

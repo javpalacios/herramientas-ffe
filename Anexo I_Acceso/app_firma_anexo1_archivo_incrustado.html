@@ -54,6 +54,7 @@
       <select id="defaultItem">
         <option value="SI" selected>SÍ</option>
         <option value="NP">NO PROCEDE</option>
+        <option value="">DEJAR EN BLANCO</option>
       </select>
     </label>
   </div>
@@ -84,11 +85,9 @@
   <legend>Alumnos</legend>
   <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv">
   <p class="hint">
-    Puedes añadir los alumnos utilizando
-    <a href="https://cloud.educa.madrid.org/s/riMW3cXWQ6XyQJJ/download/plantilla_alumnos.xlsx"
-       target="_blank" rel="noopener">esta plantilla</a>
-    o descargarlos directamente de AulaVirtual en la opción
+    Descarga la plantilla con las columnas necesarias o añade los alumnos desde AulaVirtual en la opción
     <em>Participantes</em> → <em>Descargar datos de tabla como Microsoft Excel (.xlsx)</em>.
+    <a href="#" id="tplAlumnos">Descargar plantilla</a>
   </p>
 </fieldset>
 
@@ -369,12 +368,28 @@ $('xlsxFile').addEventListener('change', async (e) => {
 function updateGenerateButton(){
   const ok = students.length > 0 && templateBytes && widgets.length > 0;
   $('generate').disabled = !ok;
-  $('generateSigned').disabled = !ok;
+  $('generateSigned').disabled = !ok || $('defaultItem').value === '';
   if (templateBytes && widgets.length === 0){
     $('status').textContent = 'El PDF no contiene widgets.';
     $('status').className = 'error';
   }
 }
+
+$('defaultItem').addEventListener('change', updateGenerateButton);
+
+function downloadTemplate(){
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ['Nombre', 'Apellido(s)'],
+    ['Ana', 'Pérez Gómez'],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Alumnos');
+  XLSX.writeFile(workbook, 'plantilla_alumnos.xlsx');
+}
+$('tplAlumnos').addEventListener('click', event => {
+  event.preventDefault();
+  downloadTemplate();
+});
 
 // ---------------- valores ----------------
 function textValue(role, data){
@@ -386,13 +401,11 @@ function textValue(role, data){
 }
 
 // ---------------- dibujar sobre el PDF ----------------
-async function fillOnePdf(student){
+async function fillOnePdf(student, removeEditableWidgets = false){
   const doc = await PDFLib.PDFDocument.load(templateBytes, { ignoreEncryption: true });
   const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(PDFLib.StandardFonts.HelveticaBold);
   const black = PDFLib.rgb(0, 0, 0);
-
-  removeWidgetAnnotations(doc, name => name in CHECK_MAP);
 
   const page = doc.getPage(0);
 
@@ -409,6 +422,14 @@ async function fillOnePdf(student){
     defaultItem:     $('defaultItem').value,
     alumno_completo: `${student.apellidos}, ${student.nombre}`,
   };
+
+  const removeAllEditableWidgets = removeEditableWidgets || data.defaultItem !== '';
+  removeWidgetAnnotations(doc, name => {
+    if (name === 'Signature15') return false;
+    if (removeAllEditableWidgets) return true;
+    const role = TEXT_MAP[name];
+    return role !== undefined && Boolean(textValue(role, data));
+  });
 
   for (const w of widgets){
     const [x1, y1, x2, y2] = w.rect;
@@ -438,7 +459,7 @@ async function fillOnePdf(student){
     if (w.fieldName in CHECK_MAP){
       const [role, expected] = CHECK_MAP[w.fieldName];
       let mark = false;
-      if (role === 'valor_pos') mark = true;
+      if (role === 'valor_pos') mark = data.defaultItem !== '';
       else if (role.startsWith('item')) mark = (data.defaultItem === expected);
       if (!mark) continue;
 
@@ -483,7 +504,7 @@ $('generate').addEventListener('click', async () => {
         const finalName = (n === 0 ? baseName : `${baseName}_${n + 1}`) + '.pdf';
         used.set(baseName, n + 1);
 
-        const bytes = await fillOnePdf(st);
+        const bytes = await fillOnePdf(st, $('defaultItem').value !== '');
         folder.file(finalName, bytes);
         ok++;
       } catch (err){
@@ -537,7 +558,7 @@ $('generateSigned').addEventListener('click', async () => {
       const finalName = (n === 0 ? baseName : `${baseName}_${n + 1}`) + '.pdf';
       used.set(baseName, n + 1);
 
-      const bytes = await fillOnePdf(st);
+      const bytes = await fillOnePdf(st, true);
       pdfs.push({ name: finalName, bytes: bytes, signedBytes: null });
     }
 
