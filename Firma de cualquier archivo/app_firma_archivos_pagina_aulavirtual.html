@@ -3,88 +3,50 @@
     <label class="d-block" for="files">Selecciona los archivos para firmar</label>
     <input type="file" id="files" class="form-control-file" accept=".pdf,application/pdf" multiple>
   </div>
-  <p class="hint">Los archivos deben estar en formato PDF y la zona de firma debe ser la misma en todos los documentos.</p>
+  <p class="form-text text-muted">Los archivos deben estar en formato PDF y la zona de firma debe ser la misma en todos los documentos.</p>
   <div id="actionBar">
     <button id="sign" class="btn btn-primary" disabled>Firmar y descargar</button>
-    <span id="status" role="status" aria-live="polite"></span>
+    <span id="status" class="ml-2 ms-2" role="status" aria-live="polite"></span>
   </div>
 </div>
 
-<style>
-  #previewDialog {
-    width: fit-content;
-    max-width: calc(100vw - 1rem);
-    min-width: min(270px, calc(100vw - 1rem));
-    height: min(900px, calc(100dvh - 1rem));
-    max-height: calc(100dvh - 1rem);
-    box-sizing: border-box;
-    padding: .75rem;
-    border: 1px solid #999;
-    border-radius: 8px;
-    color: inherit;
-    background: Canvas;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  #previewDialog:not([open]) { display: none; }
-  #previewDialog::backdrop { background: rgb(0 0 0 / 55%); }
-  #previewControls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .75rem 0; }
-  #previewDialog > p { width: 100%; max-width: 100%; box-sizing: border-box; }
-  #previewControls input { width: 5rem; }
-  #signatureFieldControl { max-width: 100%; }
-  #signatureFieldControl select { max-width: 100%; }
-  #manualControls { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
-  #previewContainer {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    justify-content: center;
-    min-height: 0;
-    width: 100%;
-    margin: .25rem auto;
-    overflow: auto;
-  }
-  #previewCanvas {
-    display: block;
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
-  }
-  #selectionCanvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); touch-action: none; cursor: crosshair; }
-  #dialogActions { display: flex; flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
-  #dialogActions button { padding: .4rem .5rem; font-size: .9rem; }
-  #cancelPreview { background: #757575; color: #fff; }
-</style>
-<dialog id="previewDialog" aria-labelledby="previewTitle">
-  <h2 id="previewTitle">Configurar la firma</h2>
-  <p id="documentWarning" class="hint" hidden></p>
-  <div id="signatureFieldControl" hidden>
-    <label for="signatureField">Ubicación de la firma</label>
-    <select id="signatureField">
-      <option value="manual">Elegir región manualmente</option>
-    </select>
-  </div>
-  <div id="manualControls">
-    <div id="previewControls">
-      <label for="pageNumber">Página</label>
-      <input id="pageNumber" type="number" min="1" value="1">
-      <span id="pageCount"></span>
+<div id="previewBackdrop" class="modal-backdrop fade" aria-hidden="true" hidden></div>
+<div id="previewDialog" class="modal moodle-has-zindex" role="dialog" aria-modal="true"
+     aria-labelledby="previewTitle" tabindex="-1" style="z-index: 1052;" hidden>
+  <div class="modal-dialog modal-lg" tabindex="-1">
+    <div id="dialogContent" class="modal-content">
+      <div class="modal-header">
+        <h2 id="previewTitle" class="modal-title h5">Configurar la firma</h2>
+      </div>
+      <div class="modal-body">
+        <div id="documentWarning" class="alert alert-warning" role="alert" hidden></div>
+        <div id="signatureFieldControl" class="form-group" hidden>
+          <label for="signatureField">Ubicación de la firma</label>
+          <select id="signatureField" class="custom-select form-select">
+            <option value="manual">Elegir región manualmente</option>
+          </select>
+        </div>
+        <div id="manualControls">
+          <div id="previewControls" class="d-flex align-items-center flex-wrap mb-2">
+            <label for="pageNumber" class="mb-0 mr-2 me-2">Página</label>
+            <input id="pageNumber" type="number" min="1" value="1" class="form-control form-control-sm w-auto">
+            <span id="pageCount" class="ml-2 ms-2 text-muted"></span>
+          </div>
+          <p class="form-text text-muted mt-0 mb-2">Selecciona con el ratón o el dedo la zona donde se colocará la firma.</p>
+          <div id="previewContainer">
+            <canvas id="previewCanvas"></canvas>
+            <canvas id="selectionCanvas" aria-label="Selecciona la región de firma"></canvas>
+          </div>
+          <p id="regionStatus" class="form-text text-muted mb-0" role="status" aria-live="polite">Aún no has seleccionado una región.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelPreview" class="btn btn-secondary" type="button">Cancelar</button>
+        <button id="confirmSign" class="btn btn-primary" type="button" disabled>Firmar y descargar</button>
+      </div>
     </div>
-    <p class="hint">Selecciona con el ratón o el dedo la zona donde se colocará la firma.</p>
-    <div id="previewContainer">
-      <canvas id="previewCanvas"></canvas>
-      <canvas id="selectionCanvas" aria-label="Selecciona la región de firma"></canvas>
-    </div>
-    <p id="regionStatus" class="hint" role="status" aria-live="polite">Aún no has seleccionado una región.</p>
   </div>
-  <div id="dialogActions">
-    <button id="cancelPreview" class="btn btn-secondary" type="button">Cancelar</button>
-    <button id="confirmSign" class="btn btn-primary" type="button" disabled>Firmar y descargar</button>
-  </div>
-</dialog>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
@@ -98,7 +60,7 @@
 
   function setStatus(message, isError = false) {
     status.textContent = message;
-    status.className = isError ? 'error' : '';
+    status.className = 'ml-2 ms-2' + (isError ? ' text-danger' : '');
   }
 
   function sanitizeFilename(name) {
@@ -174,6 +136,8 @@
     'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
   const previewDialog = $('previewDialog');
+  const previewBackdrop = $('previewBackdrop');
+  const modalDialog = previewDialog.querySelector('.modal-dialog');
   const documentWarning = $('documentWarning');
   const signatureFieldControl = $('signatureFieldControl');
   const signatureFieldSelect = $('signatureField');
@@ -184,6 +148,69 @@
   const selectionCanvas = $('selectionCanvas');
   const regionStatus = $('regionStatus');
   const confirmSignButton = $('confirmSign');
+  const previewContainer = $('previewContainer');
+  const dialogContent = $('dialogContent');
+  const modalBody = dialogContent.querySelector('.modal-body');
+  let previouslyFocusedElement = null;
+
+  function openPreviewDialog() {
+    previouslyFocusedElement = document.activeElement;
+    previewBackdrop.hidden = false;
+    previewBackdrop.classList.add('show');
+    previewDialog.hidden = false;
+    previewDialog.classList.add('show');
+    document.body.classList.add('modal-open');
+    $('cancelPreview').focus();
+  }
+
+  function closePreviewDialog() {
+    previewDialog.classList.remove('show');
+    previewBackdrop.classList.remove('show');
+    previewDialog.hidden = true;
+    previewBackdrop.hidden = true;
+    document.body.classList.remove('modal-open');
+    if (previouslyFocusedElement instanceof HTMLElement && previouslyFocusedElement.isConnected) {
+      previouslyFocusedElement.focus();
+    }
+    previouslyFocusedElement = null;
+  }
+
+  function cancelPreview() {
+    closePreviewDialog();
+    disposePreview();
+    filesInput.disabled = false;
+    signButton.disabled = filesInput.files.length === 0;
+    setStatus('Firma cancelada.');
+  }
+
+  previewDialog.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelPreview();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(previewDialog.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    )).filter(element => element.getClientRects().length > 0);
+    if (!focusable.length) {
+      event.preventDefault();
+      previewDialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === previewDialog)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  previewDialog.addEventListener('click', event => {
+    if (event.target === previewDialog) cancelPreview();
+  });
 
   let pdfs = [];
   let previewDocument = null;
@@ -252,50 +279,134 @@
     confirmSignButton.disabled = signatureFieldSelect.value === 'manual' && !selectedRegion;
   }
 
+  function themeColor() {
+    const styles = getComputedStyle(document.documentElement);
+    const value = (styles.getPropertyValue('--bs-primary') || styles.getPropertyValue('--primary') || '').trim();
+    return /^#[0-9a-f]{3,8}$/i.test(value) ? value : '#0f6cbf';
+  }
+
   function drawSelection() {
     const context = selectionCanvas.getContext('2d');
-    const previewBounds = previewCanvas.getBoundingClientRect();
-    selectionCanvas.style.width = `${previewBounds.width}px`;
-    selectionCanvas.style.height = `${previewBounds.height}px`;
     context.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
-    if (!previewBounds.width || !previewBounds.height) return;
-    const scaleX = selectionCanvas.width / previewBounds.width;
-    const scaleY = selectionCanvas.height / previewBounds.height;
+    const cssWidth = selectionCanvas.clientWidth;
+    if (!cssWidth || !selectionCanvas.width) return;
+    const k = selectionCanvas.width / cssWidth;           // píxeles del bitmap por píxel CSS
     context.strokeStyle = '#767676';
-    context.lineWidth = Math.max(0.5 * scaleX, 0.5 * scaleY);
-    context.strokeRect(
-      context.lineWidth / 2,
-      context.lineWidth / 2,
-      selectionCanvas.width - context.lineWidth,
-      selectionCanvas.height - context.lineWidth
-    );
+    context.lineWidth = k;
+    context.strokeRect(k / 2, k / 2, selectionCanvas.width - k, selectionCanvas.height - k);
     const region = drawingRegion || selectedRegion;
     if (!region || region.page !== currentPage || !previewViewport) return;
     const { left, top, right, bottom } = region.viewportRect;
-    context.fillStyle = 'rgba(0, 87, 184, 0.16)';
-    context.strokeStyle = '#0057b8';
-    context.lineWidth = 2;
+    const color = themeColor();
+    context.save();
+    context.globalAlpha = 0.16;
+    context.fillStyle = color;
     context.fillRect(left, top, right - left, bottom - top);
+    context.restore();
+    context.strokeStyle = color;
+    context.lineWidth = 2 * k;
     context.strokeRect(left, top, right - left, bottom - top);
   }
 
-  const previewResizeObserver = new ResizeObserver(drawSelection);
-  previewResizeObserver.observe(previewCanvas);
+  // Coloca las dos capas (página y selección) con tamaño y posición explícitos,
+  // ajustadas al espacio disponible. No depende de flex, % ni de reglas del tema.
+  function fitPreview() {
+    if (!previewViewport) return;
+    const availableWidth = previewContainer.clientWidth;
+    const availableHeight = previewContainer.clientHeight;
+    if (!availableWidth || !availableHeight) return;
+    const scale = Math.min(availableWidth / previewViewport.width, availableHeight / previewViewport.height);
+    const width = Math.max(1, Math.floor(previewViewport.width * scale));
+    const height = Math.max(1, Math.floor(previewViewport.height * scale));
+    const left = Math.floor((availableWidth - width) / 2);
+    const top = Math.floor((availableHeight - height) / 2);
+    for (const canvas of [previewCanvas, selectionCanvas]) {
+      Object.assign(canvas.style, {
+        position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
+        margin: '0', maxWidth: 'none', maxHeight: 'none', transform: 'none', display: 'block',
+      });
+    }
+    selectionCanvas.style.touchAction = 'none';
+    selectionCanvas.style.cursor = 'crosshair';
+  }
 
-  function fitDialogToPreview() {
-    const style = getComputedStyle(previewDialog);
-    const horizontalSpace =
-      parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) +
-      parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
-    const availableWidth = Math.max(0, window.innerWidth - 16);
-    const targetWidth = previewCanvas.getBoundingClientRect().width * 1.7 + horizontalSpace;
-    previewDialog.style.width = `${Math.min(Math.ceil(targetWidth), availableWidth)}px`;
+  // Dimensiona el diálogo y reparte el espacio vertical que sobra a la vista previa.
+  const MIN_PREVIEW_HEIGHT = 100;
+  function relayout() {
+    if (!previewDialog.classList.contains('show')) return;
+    const maxHeight = Math.max(160, window.innerHeight - 16);
+    modalDialog.style.width = `${Math.max(240, Math.min(window.innerWidth - 16, 760))}px`;
+    modalDialog.style.maxHeight = `${maxHeight}px`;
+    modalDialog.style.margin = '0.5rem auto';
+    Object.assign(dialogContent.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '0',
+      maxHeight: '100%',
+    });
+    if (manualControls.hidden) {
+      // Solo se elige un campo de firma: el diálogo se ajusta a su contenido.
+      modalDialog.style.height = 'auto';
+      dialogContent.style.height = 'auto';
+      Object.assign(modalBody.style, {
+        display: 'block',
+        flex: '0 1 auto',
+        flexDirection: '',
+        minHeight: '',
+        overflowY: 'auto',
+      });
+    } else {
+      modalDialog.style.height = `${Math.min(maxHeight, 900)}px`;
+      dialogContent.style.height = '100%';
+      Object.assign(modalBody.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        flex: '1 1 auto',
+        minHeight: '0',
+        overflowY: 'hidden',
+      });
+      Object.assign(manualControls.style, {
+        display: 'flex',
+        flex: '1 1 auto',
+        flexDirection: 'column',
+        minHeight: '0',
+      });
+    }
+    Object.assign(previewContainer.style, {
+      position: 'relative',
+      display: 'flex',
+      flex: '1 1 auto',
+      minHeight: `${MIN_PREVIEW_HEIGHT}px`,
+      overflow: 'hidden',
+      width: '100%',
+    });
+    if (!manualControls.hidden) {
+      fitPreview();
+    }
+    drawSelection();
+  }
+
+  let relayoutFrame = 0;
+  function scheduleRelayout() {
+    cancelAnimationFrame(relayoutFrame);
+    relayoutFrame = requestAnimationFrame(relayout);
+  }
+  window.addEventListener('resize', scheduleRelayout);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleRelayout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleRelayout);
+  // Si algo del diálogo cambia de tamaño (aviso, mensajes de estado, cabecera, pie...), se recoloca el visor.
+  // Solo se observan los demás elementos; el visor no, así que no hay bucles.
+  if (typeof ResizeObserver !== 'undefined') {
+    const layoutObserver = new ResizeObserver(scheduleRelayout);
+    [
+      dialogContent.querySelector('.modal-header'), dialogContent.querySelector('.modal-footer'),
+      documentWarning, signatureFieldControl, $('previewControls'), manualControls.querySelector('p'), $('regionStatus'),
+    ].forEach(element => { if (element) layoutObserver.observe(element); });
   }
 
   async function renderPreviewPage(number, clearRegion = true) {
     if (!previewDocument) return;
     currentPage = Math.max(1, Math.min(previewDocument.numPages, number));
-    previewDialog.style.width = '';
     if (clearRegion) {
       selectedRegion = null;
       regionStatus.textContent = 'Aún no has seleccionado una región.';
@@ -311,10 +422,8 @@
     selectionCanvas.width = viewport.width;
     selectionCanvas.height = viewport.height;
     await page.render({ canvasContext: previewCanvas.getContext('2d'), viewport }).promise;
-    drawSelection();
     page.cleanup();
-    fitDialogToPreview();
-    drawSelection();
+    relayout();
   }
 
   function pdfRectangleFromSelection(region) {
@@ -376,11 +485,9 @@
 
     currentPage = 1;
     selectedRegion = null;
-    previewDialog.style.width = '';
     confirmSignButton.textContent = documentWarning.hidden ? 'Firmar y descargar' : 'Continuar y firmar';
-    previewDialog.showModal();
+    openPreviewDialog();
     await renderPreviewPage(1);
-    fitDialogToPreview();
     updateConfirmButton();
     setStatus('');
   }
@@ -518,6 +625,7 @@
       await openSignaturePreview();
     } catch (error) {
       console.error('Error al preparar la vista previa:', error);
+      if (previewDialog.classList.contains('show')) closePreviewDialog();
       disposePreview();
       filesInput.disabled = false;
       signButton.disabled = filesInput.files.length === 0;
@@ -528,6 +636,7 @@
   signatureFieldSelect.addEventListener('change', () => {
     manualControls.hidden = signatureFieldSelect.value !== 'manual';
     updateConfirmButton();
+    relayout();
   });
   pageNumberInput.addEventListener('change', () => renderPreviewPage(Number(pageNumberInput.value) || 1));
 
@@ -576,23 +685,13 @@
   });
 
   $('cancelPreview').addEventListener('click', () => {
-    previewDialog.close();
-    disposePreview();
-    filesInput.disabled = false;
-    signButton.disabled = filesInput.files.length === 0;
-    setStatus('Firma cancelada.');
-  });
-  previewDialog.addEventListener('cancel', () => {
-    disposePreview();
-    filesInput.disabled = false;
-    signButton.disabled = filesInput.files.length === 0;
-    setStatus('Firma cancelada.');
+    cancelPreview();
   });
   confirmSignButton.addEventListener('click', async () => {
     const field = getSelectedField();
     if (!field && !selectedRegion) return;
     const choice = field ? { field } : { region: pdfRectangleFromSelection(selectedRegion) };
-    previewDialog.close();
+    closePreviewDialog();
     confirmSignButton.disabled = true;
     try {
       await signSelectedPdfs(choice);
