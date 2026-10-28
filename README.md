@@ -45,10 +45,13 @@ la versión **standalone** alojada en GitHub Pages:
 1. Añade al curso un recurso de tipo **URL**.
 2. Pega la dirección de la aplicación standalone. Las páginas están en la
    carpeta [`standalone/`](standalone/); por ejemplo:
-   `https://javpalacios.github.io/App-Firma-en-AulaVirtual/standalone/anexo-i-acceso.html`.
+   `https://javpalacios.github.io/herramientas-ffe/standalone/anexo-i-acceso.html`.
 3. En **Apariencia → Mostrar**, selecciona **En una ventana emergente** o
    **Incrustar**, según el resultado que prefieras.
 4. Guarda y prueba el enlace con una cuenta de estudiante.
+
+También puedes probar las aplicaciones desde la
+[página principal de GitHub Pages](https://javpalacios.github.io/herramientas-ffe/).
 
 Las páginas standalone reutilizan los mismos fragmentos de aplicación que las
 versiones Moodle, dentro de un marco, y cargan Bootstrap para su presentación.
