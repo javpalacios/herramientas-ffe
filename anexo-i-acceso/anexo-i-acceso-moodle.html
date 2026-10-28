@@ -1,3 +1,19 @@
+<script>
+if (new URLSearchParams(window.location.search).get('standalone') === '1') {
+  document.addEventListener('DOMContentLoaded', () => {
+    const bootstrapLink = document.createElement('link');
+    bootstrapLink.rel = 'stylesheet';
+    bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css';
+    document.head.appendChild(bootstrapLink);
+    const viewportMeta = document.createElement('meta');
+    viewportMeta.name = 'viewport';
+    viewportMeta.content = 'width=device-width, initial-scale=1';
+    document.head.appendChild(viewportMeta);
+    document.body.classList.add('container', 'py-4');
+    document.title = 'Anexo I · Acceso a FFE';
+  });
+}
+</script>
 <div>
   <h3>Datos del Anexo</h3>
   <div class="row">
@@ -87,6 +103,8 @@
   <p class="hint">
     Descarga la plantilla con las columnas necesarias o añade los alumnos desde AulaVirtual en la opción
     <em>Participantes</em> → <em>Descargar datos de tabla como Microsoft Excel (.xlsx)</em>.
+    Se admite la columna <em>Nombre</em> o <em>Alumno/a</em>; <em>Apellido(s)</em> es opcional.
+    Si se omite, puedes indicar el nombre completo en formato <em>Apellidos, Nombre</em>.
     <a href="#" id="tplAlumnos">Descargar plantilla</a>
   </p>
 </div>
@@ -327,6 +345,34 @@ function removeWidgetAnnotations(doc, predicate){
 }
 
 // ---------------- carga del Excel ----------------
+function parseStudentRows(rows){
+  if (rows.length < 2) throw new Error('El Excel no tiene filas de datos.');
+  const headers = rows[0].map(h => String(h).trim());
+  const iN = headers.findIndex(header => ['nombre', 'alumno/a'].includes(header.toLocaleLowerCase('es')));
+  const iA = headers.findIndex(header => header.toLocaleLowerCase('es') === 'apellido(s)');
+  if (iN < 0) throw new Error('No se encuentra la columna "Nombre".');
+
+  const out = []; const seen = new Set();
+  for (let i = 1; i < rows.length; i++){
+    const r = rows[i] || [];
+    let nombre = String(r[iN] || '').trim();
+    let apellidos = iA >= 0 ? String(r[iA] || '').trim() : '';
+    if (!apellidos) {
+      const comma = nombre.indexOf(',');
+      if (comma >= 0) {
+        apellidos = nombre.slice(0, comma).trim();
+        nombre = nombre.slice(comma + 1).trim();
+      }
+    }
+    if (!nombre) continue;
+    const key = (apellidos + '||' + nombre).toLocaleLowerCase('es');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ nombre, apellidos });
+  }
+  return out;
+}
+
 $('xlsxFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
@@ -335,25 +381,7 @@ $('xlsxFile').addEventListener('change', async (e) => {
     const wb = XLSX.read(data, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    if (rows.length < 2) throw new Error('El Excel no tiene filas de datos.');
-    const headers = rows[0].map(h => String(h).trim());
-    const iN = headers.indexOf('Nombre');
-    const iA = headers.indexOf('Apellido(s)');
-    if (iN < 0) throw new Error('No se encuentra la columna "Nombre".');
-    if (iA < 0) throw new Error('No se encuentra la columna "Apellido(s)".');
-
-    const out = []; const seen = new Set();
-    for (let i = 1; i < rows.length; i++){
-      const r = rows[i] || [];
-      const nombre = String(r[iN] || '').trim();
-      const apellidos = String(r[iA] || '').trim();
-      if (!nombre || !apellidos) continue;
-      const key = (apellidos + '||' + nombre).toLocaleLowerCase('es');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ nombre, apellidos });
-    }
-    students = out;
+    students = parseStudentRows(rows);
     $('status').textContent = `Cargados ${students.length} alumnos.`;
     $('status').className = '';
   } catch (err){
@@ -420,7 +448,7 @@ async function fillOnePdf(student, removeEditableWidgets = false){
     lugar:           $('lugar').value.trim(),
     fecha:           $('fecha').value,
     defaultItem:     $('defaultItem').value,
-    alumno_completo: `${student.apellidos}, ${student.nombre}`,
+    alumno_completo: [student.apellidos, student.nombre].filter(Boolean).join(', '),
   };
 
   const removeAllEditableWidgets = removeEditableWidgets || data.defaultItem !== '';
@@ -499,7 +527,7 @@ $('generate').addEventListener('click', async () => {
       try {
         const ap = sanitizePart(st.apellidos);
         const no = sanitizePart(st.nombre);
-        const baseName = `${sanitizePart(grupo)}_${ap}_${no}_${sanitizePart(codigo)}`;
+        const baseName = [grupo, ap, no, codigo].filter(Boolean).map(sanitizePart).join('_');
         const n = used.get(baseName) || 0;
         const finalName = (n === 0 ? baseName : `${baseName}_${n + 1}`) + '.pdf';
         used.set(baseName, n + 1);
@@ -553,7 +581,7 @@ $('generateSigned').addEventListener('click', async () => {
     for (const st of students){
       const ap = sanitizePart(st.apellidos);
       const no = sanitizePart(st.nombre);
-      const baseName = `${sanitizePart(grupo)}_${ap}_${no}_${sanitizePart(codigo)}`;
+      const baseName = [grupo, ap, no, codigo].filter(Boolean).map(sanitizePart).join('_');
       const n = used.get(baseName) || 0;
       const finalName = (n === 0 ? baseName : `${baseName}_${n + 1}`) + '.pdf';
       used.set(baseName, n + 1);
