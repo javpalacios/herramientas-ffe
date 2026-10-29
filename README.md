@@ -12,9 +12,9 @@ la firma, comunicarse con AutoFirma, se necesita conexión a Internet.
 
 | Aplicación | Descripción | Página standalone | Fragmento para Moodle |
 |---|---|---|---|
-| Anexo I · Acceso a FFE | Genera los anexos de acceso a FFE del alumnado. | [Abrir](standalone/anexo-i-acceso.html) | [Código Moodle](anexo-i-acceso/anexo-i-acceso-moodle.html) |
-| Anexo I · Plan de formación | Prepara el plan de formación y sus resultados de aprendizaje. | [Abrir](standalone/anexo-i-plan-formacion.html) | [Código Moodle](anexo-i-plan-formacion/anexo-i-plan-formacion-moodle.html) |
-| Firma masiva de ficheros PDF | Firma varios PDF con la misma ubicación de firma. | [Abrir](standalone/firma-cualquier-archivo.html) | [Código Moodle](firma-cualquier-archivo/firma-cualquier-archivo-moodle.html) |
+| Anexo I · Acceso a FFE | Genera los anexos de acceso a FFE del alumnado. | [Abrir](https://javpalacios.github.io/herramientas-ffe/standalone/anexo-i-acceso.html) | [Código Moodle](anexo-i-acceso/anexo-i-acceso-moodle.html) |
+| Anexo I · Plan de formación | Prepara el plan de formación y sus resultados de aprendizaje. | [Abrir](https://javpalacios.github.io/herramientas-ffe/standalone/anexo-i-plan-formacion.html) | [Código Moodle](anexo-i-plan-formacion/anexo-i-plan-formacion-moodle.html) |
+| Firma masiva de ficheros PDF | Firma varios PDF con la misma ubicación de firma. | [Abrir](https://javpalacios.github.io/herramientas-ffe/standalone/firma-cualquier-archivo.html) | [Código Moodle](firma-cualquier-archivo/firma-cualquier-archivo-moodle.html) |
 
 ## Uso recomendado en Aula Virtual de Educamadrid
 
